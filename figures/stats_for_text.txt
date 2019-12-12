@@ -1,0 +1,68 @@
+Last updated: 2019-12-12
+
+Figure 1 results: among 6 individuals with anomalies noted, the mean CV was 12.6%
+
+Figure 1 results: among 23 individuals without anomalies noted, the mean CV was 5.8%
+
+Figure 1 results: CSF PrP concentration showed a significant difference between genotypes (P = 0.016, one-way ANOVA) driven by lower PrP in D178N mutation carriers.
+
+Figure 1 results: among 10 individuals with longitudinal visits over 10-20 months, mean CV = 7.2%
+
+Figure 2A (T-tau) legend: N = 63 samples: N = 24 poscons, N = 39 participants
+
+Figure 2 results: CSF T-tau, symptomatic poscons vs. all study participants: 3425.4±3962.9 vs. 235.7±101.5 pg/mL, P = 2.6e-10, two-sided Kolmogorov-Smirnov test
+
+Figure 2 results: CSF T-tau, mutation non-carriers vs. carriers: 251.8±84.5 vs. 224.5±112.3 pg/mL, P = 0.015, two-sided Kolmogorov-Smirnov test
+
+Figure 2B (NfL) legend: N = 58 samples: N = 19 poscons, N = 39 participants
+
+Figure 2 results: CSF NfL, symptomatic poscons vs. all study participants: 17809.5±12943.7 vs. 845.5±361.9 pg/mL, P = 1.6e-11, two-sided Kolmogorov-Smirnov test
+
+Figure 2 results: CSF NfL, mutation non-carriers vs. carriers: 767.4±286.8 vs. 899.9±403.2 pg/mL, P = 0.61, two-sided Kolmogorov-Smirnov test
+
+Figure 2C results: CSF T-tau longitudinal P value: 0.51, linear regression, N = 10 individuals
+
+Figure 2C results: CSF T-tau longitudinal CV: 7.8%, N = 10 individuals.
+
+Figure 2C results: CSF T-tau 3-visit longitudinal P value without the one mutation-negative individual who showed a suggestive upward trend: 0.48, linear regression
+
+Figure 2D results: CSF NfL longitudinal P value: 0.91, linear regression, N = 10 individuals.
+
+Figure 2D results: CSF NfL longitudinal CV: 9.9%, N = 10 individuals.
+
+Figure 3 results: plasma tau, mutation non-carriers vs. carriers: 3.0±1.0 vs. 3.1±1.1 pg/mL, P = 0.93, two-sided Kolmogorov-Smirnov test
+
+Figure 3A legend: N= 43 individuals.
+
+Figure 3 results: plasma NfL, mutation non-carriers vs. carriers: 7.2±2.7 vs. 9.6±6.5 pg/mL, P = 0.46, two-sided Kolmogorov-Smirnov test
+
+Figure 3 results: plasma NfL 3-visit longitudinal P value: 0.91, linear regression
+
+Figure 3B legend: N= 14 individuals.
+
+Figure 4 results: SHaPrP RT-QuIC sensitivity to positive controls was: 88%
+
+Figure S1 legend: N = 24, nominal P =  0.00029, two-sided paired t test
+
+Figure S2A legend: tau cross-sectional comparison based on N = 28 individuals.
+
+Figure S2B legend: nfl cross-sectional comparison based on N = 28 individuals.
+
+Figure S2C legend: gfap cross-sectional comparison based on N = 28 individuals.
+
+Figure S2D legend: tau test-retest based on N = 44 samples from N = 22 individuals.
+
+Figure S2E legend: nfl test-retest based on N = 44 samples from N = 22 individuals.
+
+Figure S2F legend: gfap test-retest based on N = 44 samples from N = 22 individuals.
+
+Figure S2G legend: CSF NfL comparison based on N = 36 samples from N = 27 individuals.
+
+Figure S2H legend: CSF T-tau comparison based on N = 39 samples from N = 27 individuals.
+
+Figure S3 legend: plasma T-tau short-term mean CV = 38%, N = 30
+
+Figure S3 legend: plasma NfL short-term mean CV = 18%, N = 31
+
+Figure S4 results: BvPrP RT-QuIC sensitivity to positive controls was: 53%
+
