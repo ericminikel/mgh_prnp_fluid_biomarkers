@@ -81,6 +81,14 @@ from     biomarkers b, indivs i, params p
 where    b.deid = i.deid and i.gt = p.gt
 ;")
 
+### CHECK NUMBERS
+
+sqldf("select cat, n_visits, count(*) n from (select cat, deid, count(*) n_visits from master group by 1, 2) group by 1, 2 order by 1,2;")
+sqldf("select cat, deid, count(*) n_visits from master where deid < 44 group by 1, 2 order by 1 asc, 3 desc;")
+
+sqldf("select n_visits, count(*) n from (select deid, count(*) n_visits from biomarkers where visit > 0 group by 1) group by 1 order by 1,2;")
+sqldf("select max_visit, count(*) n from (select deid, max(visit) max_visit from biomarkers where visit > 0 group by 1) group by 1 order by 1,2;")
+
 ### BEGIN FIGURE 1
 
 imgsave(paste('figures/figure-1.',imgmode,sep=''),width=6.5*resx,height=6*resx,res=resx)
