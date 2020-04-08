@@ -258,265 +258,40 @@ dev.off() ### END FIGURE 1
 
 
 
+### BEGIN TABLE S2
+step1 = sqldf("
+select   deid, x, gt, cat, avg(csf_prp) mean, stdev(csf_prp) sd, stdev(csf_prp)/avg(csf_prp) cv, count(*) n
+from     elisa_tr
+group by 1, 2, 3
+order by 1, 2, 3
+;")
+step2 = sqldf("
+select   x, gt mutation, avg(mean) mean_mean, stdev(mean) sd_mean, count(*) n_participants
+from     step1
+group by 1, 2
+order by 1, 2
+;")
+
+step2$mean_sd = paste0(formatC(step2$mean_mean,format='f',digits=1),' ± ',formatC(step2$sd_mean,format='f',digits=1,width=5,flag=''))
+table_s2 = step2[,c('mutation','mean_sd','n_participants')]
+
+write.table(table_s2, 'figures/table-s2.tsv', sep='\t', row.names=F, quote=F, col.names=T)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### BEGIN FIGURE 2
-imgsave(paste('figures/figure-2.',imgmode,sep=''),width=6.5*resx,height=6*resx,res=resx)
-
-layout_matrix = matrix(c(1,2,3,4),nrow=2,byrow=T)
-layout(layout_matrix)
-
-xlims = expand_range(params$x, by = 0.5)
-tau_ylims = c(0,15000)
-tau_short_ylims = c(0,500)
-tau_yats = (0:3)*5000
-tau_short_yats = (0:6)*100
-tau_ylabs = tau_yats/1000 # convert pg/mL to ng/mL
-tau_short_ylabs = tau_short_yats / 1000
-
-nfl_ylims = c(0,52000)
-nfl_short_ylims = c(0,2000)
-nfl_yats = (0:6)*10000
-nfl_short_yats = (0:4)*500
-nfl_ylabs = nfl_yats / 1000 # convert pg/mL to ng/mL
-nfl_short_ylabs = nfl_short_yats / 1000
-
-par(mar=c(6,4,3,3))
-plot(NA, NA, xlim=xlims, ylim=tau_ylims, ann=FALSE, axes=FALSE, xaxs='i', yaxs='i')
-
-tau_llq = 40.6 #kitinfo3$conc[kitinfo3$cal=='CAL6']
-tau_ulq = 14772.5 #kitinfo7$conc[kitinfo7$cal=='CAL1']*25/4 # poscons run at 1:25 std curve at 1:4
-
-tau = master
-# do l95 and u95 in advance so you don't get weird artifacts
-tau$l95 = pmax(tau$csf_tau - 1.96*tau$csf_tau_se, tau_llq)
-tau$u95 = pmin(tau$csf_tau + 1.96*tau$csf_tau_se, tau_ulq)
-
-# tau at only most recent visit for panel A
-tau_mv = sqldf("
-               select   tau.*
-               from     tau, (select deid, max(visit) maxvisit from tau where csf_tau is not null group by 1 order by 1) taumaxvisit
-               where    tau.deid = taumaxvisit.deid
-               and      tau.visit = taumaxvisit.maxvisit
-               ;")
-
-write(paste('Figure 2A (T-tau) legend: N = ',nrow(tau_mv),' samples: N = ',sum(tau_mv$cat %in% symptomatic_cats),' poscons, N = ',sum(tau_mv$cat %in% participant_cats),' participants\n',sep=''),text_stats_path,append=T)
-
-tau_mv$xbee = 0.0
-
-set.seed(1)
-for (x in unique(tau_mv$x)) {
-  rows = tau_mv$x == x & !is.na(tau_mv$csf_tau)
-  tau_mv$xbee[rows] = tau_mv$x[rows] + beeswarm(csf_tau ~ x, data=tau_mv[rows,], do.plot=F, spacing=0.75, method='hex', corral='random', corralWidth=0.75)$x - 1
-}
-
-# manually fix xbee for high poscon samples for which 95%CIs are large in absolute terms
-to_fix = tau_mv$pgml_av > 1000 & tau_mv$u95 - tau_mv$l95 > 200 & tau_mv$csf_tau < 6000
-set.seed(2)
-tau_mv$xbee[to_fix] = tau_mv$xbee[to_fix] + runif(min=-.33,max=.33,n=sum(to_fix))
-to_fix_more = tau_mv$csf_tau >= 6000
-tau_mv$xbee[to_fix_more] = tau_mv$xbee[to_fix_more] + runif(min=-.33,max=.33,n=sum(to_fix_more))
-
-betweens = params$x - 0.5
-
-limit_col = '#000000'
-control_col = '#404288'
-line_col = '#777777'
-
-axis(side=1, at=xlims, labels=NA, lwd=1, lwd.ticks=0)
-par(xpd=T)
-text(x=params$x, y=rep(0,nrow(params)), srt=45, adj=c(1,1), col=params$color, font=2, labels=params$disp)
-par(xpd=F)
-abline(v=betweens)
-axis(side=2, at=tau_yats, labels=tau_ylabs, lwd=1, lwd.ticks=1, las=2)
-mtext(side=2, line=2.5, text='CSF T-tau (ng/mL)')
-abline(h=c(tau_llq,tau_ulq), lwd=1.5, lty=2, col=limit_col)
-mtext(side=4, at=tau_llq, line=0.25, las=2, col=limit_col, text='LLQ')
-mtext(side=4, at=tau_ulq, line=0.25, las=2, col=limit_col, text='ULQ')
-axis(side=4, at=tau_ylims, labels=NA, lwd=1, lwd.ticks=0, las=2)
-
-segments(x0=tau_mv$xbee, x1=tau_mv$xbee, y0=tau_mv$l95, y1=tau_mv$u95, lwd=1.5, col=tau_mv$color)
-points(tau_mv$xbee, tau_mv$csf_tau, pch=20, cex=.75, col=tau_mv$color)
-
-mtext('A', side=3, cex=2, adj = 0.0, line = 0.5)
-
-# did CSF T-tau differ in carriers vs. non-carriers, and in participants vs. poscons?
-csf_tau_ks_carrier_non = ks.test(tau_mv$csf_tau[tau_mv$cat %in% noncarrier_cats],  tau_mv$csf_tau[tau_mv$cat %in% carrier_cats], alternative='two.sided')
-csf_tau_ks_symptomatic_non = ks.test(tau_mv$csf_tau[tau_mv$cat %in% participant_cats], tau_mv$csf_tau[tau_mv$cat %in% symptomatic_cats], alternative='two.sided')
-
-participant_csftau_text = meansd(tau_mv$csf_tau[tau_mv$cat %in% participant_cats])
-symptomatic_csftau_text = meansd(tau_mv$csf_tau[tau_mv$cat %in% symptomatic_cats])
-
-write(paste('Figure 2 results: CSF T-tau, symptomatic poscons vs. all study participants: ',symptomatic_csftau_text,' vs. ',participant_csftau_text,' pg/mL, P = ',format_pval(csf_tau_ks_symptomatic_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
-
-noncarrier_csftau_text = meansd(tau_mv$csf_tau[tau_mv$cat %in% noncarrier_cats])
-carrier_csftau_text = meansd(tau_mv$csf_tau[tau_mv$cat %in% carrier_cats])
-
-write(paste('Figure 2 results: CSF T-tau, mutation non-carriers vs. carriers: ',noncarrier_csftau_text,' vs. ',carrier_csftau_text,' pg/mL, P = ',format_pval(csf_tau_ks_carrier_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
-
-# how many study visits had CSF T-tau measured?
-sum(tau_mv$cat %in% participant_cats)
-
-xlims = expand_range(params$x, by=0.5)
-
-par(mar=c(6,4,3,3))
-plot(NA, NA, xlim=xlims, ylim=nfl_ylims, ann=FALSE, axes=FALSE, xaxs='i', yaxs='i')
-
-# nfl at only most recent visit
-nfl_mv = sqldf("
-               select   nfl.*
-               from     master nfl, (select deid, max(visit) maxvisit from master where csf_nfl is not null group by 1 order by 1) nflmaxvisit
-               where    nfl.deid = nflmaxvisit.deid
-               and      nfl.visit = nflmaxvisit.maxvisit
-               ;")
-nfl_mv$l95 = nfl_mv$csf_nfl - 1.96*nfl_mv$csf_nfl_se
-nfl_mv$u95 = nfl_mv$csf_nfl + 1.96*nfl_mv$csf_nfl_se
-
-write(paste('Figure 2B (NfL) legend: N = ',nrow(nfl_mv),' samples: N = ',sum(nfl_mv$cat=='p'),' poscons, N = ',sum(nfl_mv$cat!='p'),' participants\n',sep=''),text_stats_path,append=T)
-
-nfl_mv$xbee = 0.0
-
-set.seed(1)
-for (x in unique(nfl_mv$x)) {
-  rows = nfl_mv$x == x
-  nfl_mv$xbee[rows] = nfl_mv$x[rows] + beeswarm(csf_nfl ~ x, data=nfl_mv[rows,], do.plot=F, spacing=0.75, method='hex', corral='random', corralWidth=0.75)$x - 1
-}
-
-betweens = params$x - 0.5
-
-nfl_llq = 100 * 2
-nfl_ulq = 10000 * 5
-
-axis(side=1, at=xlims, labels=NA, lwd=1, lwd.ticks=0)
-par(xpd=T)
-text(x=params$x, y=rep(0,nrow(params)), srt=45, adj=c(1,1), col=params$color, font=2, labels=params$disp)
-par(xpd=F)
-
-abline(v=betweens)
-axis(side=2, at=nfl_yats, labels=nfl_ylabs, lwd=1, lwd.ticks=1, las=2)
-mtext(side=2, line=2.5, text='CSF NfL (ng/mL)')
-abline(h=c(nfl_llq,nfl_ulq), lwd=1.5, lty=2, col=limit_col)
-mtext(side=4, at=nfl_llq, line=0.25, las=2, col=limit_col, text='LLQ')
-mtext(side=4, at=nfl_ulq, line=0.25, las=2, col=limit_col, text='ULQ')
-axis(side=4, at=nfl_ylims, labels=NA, lwd=1, lwd.ticks=0, las=2)
-
-segments(x0=nfl_mv$xbee, x1=nfl_mv$xbee, y0=nfl_mv$l95, y1=nfl_mv$u95, lwd=1.5, col=nfl_mv$color)
-points(nfl_mv$xbee, nfl_mv$csf_nfl, pch=20, cex=.75, col=nfl_mv$color)
-
-mtext('B', side=3, cex=2, adj = 0.0, line = 0.5)
-
-# did CSF NfL differ in carriers vs. non-carriers, and in participants vs. poscons?
-csf_nfl_ks_carrier_non = ks.test(nfl_mv$csf_nfl[nfl_mv$cat %in% noncarrier_cats],  nfl_mv$csf_nfl[nfl_mv$cat %in% carrier_cats], alternative='two.sided')
-csf_nfl_ks_symptomatic_non = ks.test(nfl_mv$csf_nfl[nfl_mv$cat %in% participant_cats], nfl_mv$csf_nfl[nfl_mv$cat %in% symptomatic_cats], alternative='two.sided')
-
-participant_csfnfl_text = meansd(nfl_mv$csf_nfl[nfl_mv$cat %in% participant_cats])
-symptomatic_csfnfl_text = meansd(nfl_mv$csf_nfl[nfl_mv$cat %in% symptomatic_cats])
-
-write(paste('Figure 2 results: CSF NfL, symptomatic poscons vs. all study participants: ',symptomatic_csfnfl_text,' vs. ',participant_csfnfl_text,' pg/mL, P = ',format_pval(csf_nfl_ks_symptomatic_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
-
-noncarrier_csfnfl_text = meansd(nfl_mv$csf_nfl[nfl_mv$cat %in% noncarrier_cats])
-carrier_csfnfl_text = meansd(nfl_mv$csf_nfl[nfl_mv$cat %in% carrier_cats])
-
-write(paste('Figure 2 results: CSF NfL, mutation non-carriers vs. carriers: ',noncarrier_csfnfl_text,' vs. ',carrier_csfnfl_text,' pg/mL, P = ',format_pval(csf_nfl_ks_carrier_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
-
-sum(nfl_mv$cat %in% participant_cats)
-
-### panels C & D - longitudinal tau & NfL where avails
-
-tau_longit = sqldf("
-                   select   *
-                   from     master t
-                   where    t.deid in (select deid from master where visit = 3 and csf_tau is not null)
-                   and      csf_tau is not null
-                   order by deid, visit
-                   ;")
-m = lm(csf_tau ~ deid + dayno_shift, data=tau_longit)
-tau_longit_pval = summary(m)$coefficients['dayno_shift','Pr(>|t|)']
-write(paste('Figure 2C results: CSF T-tau longitudinal P value: ',format_pval(tau_longit_pval),', linear regression, N = ',length(unique(tau_longit$deid)),' individuals\n',sep=''),text_stats_path,append=T)
-
-tau_longit_cv_calc = sqldf("
-                           select   deid, avg(csf_tau) mean_tau, stdev(csf_tau) sd_tau, count(*) n, stdev(csf_tau)/avg(csf_tau) cv_tau
-                           from     tau_longit
-                           group by 1
-                           order by 1
-                           ;")
-tau_longit_cv = mean(tau_longit_cv_calc$cv)
-write(paste('Figure 2C results: CSF T-tau longitudinal CV: ',percent(tau_longit_cv, digits=1, format='f'),', N = ',nrow(tau_longit_cv_calc),' individuals.\n',sep=''),text_stats_path,append=T)
-
-m = lm(csf_tau ~ deid + dayno_shift, data=subset(tau_longit, deid != '17'))
-tau_longit_pval = summary(m)$coefficients['dayno_shift','Pr(>|t|)']
-write(paste('Figure 2C results: CSF T-tau 3-visit longitudinal P value without the one mutation-negative individual who showed a suggestive upward trend: ',format_pval(tau_longit_pval),', linear regression\n',sep=''),text_stats_path,append=T)
-
-par(mar=c(4,4,3,3))
-xmax = 365*2
-plot(NA, NA, xlim=c(0,xmax), ylim=tau_short_ylims, xaxs='i', yaxs='i', axes=F, ann=F)
-axis(side=1, at=seq(0, xmax*1.1, 30.44), labels=NA, lwd=1, lwd.ticks=1, tck=-0.025)
-axis(side=1, at=c(0,365/2,365,365*3/2,730), labels=c(0,6,12,18,24), lwd=0, lwd.ticks=1, tck=-0.05)
-axis(side=2, at=tau_short_yats, labels=tau_short_ylabs, lwd=1, lwd.ticks=1, las=2)
-mtext(side=2, line=2.5, text='CSF T-tau (ng/mL)')
-abline(h=c(tau_llq,tau_ulq), lwd=1.5, lty=2, col=limit_col)
-mtext(side=4, at=tau_llq, line=0.25, las=2, col=limit_col, text='LLQ')
-mtext(side=4, at=tau_ulq, line=0.25, las=2, col=limit_col, text='ULQ')
-axis(side=4, at=tau_short_ylims, labels=NA, lwd=1, lwd.ticks=0, las=2)
-mtext(side=1, line=2.5, text='months from first LP')
-
-for (each_indiv in unique(tau_longit$deid)) {
-  subs = subset(tau_longit, deid==each_indiv)
-  points(subs$dayno_shift, subs$csf_tau, type='l', lwd=3, col=subs$color)
-}
-
-mtext('C', side=3, cex=2, adj = -0.1, line = 1.5)
-
-nfl_longit = sqldf("
-                   select   *
-                   from     master n
-                   where    n.deid in (select deid from master where visit = 3 and csf_nfl is not null)
-                   and      csf_nfl is not null
-                   order by deid, visit
-                   ;")
-
-m = lm(csf_nfl ~ deid + dayno_shift, data=nfl_longit)
-nfl_longit_pval = summary(m)$coefficients['dayno_shift','Pr(>|t|)']
-write(paste('Figure 2D results: CSF NfL longitudinal P value: ',format_pval(nfl_longit_pval),', linear regression, N = ',length(unique(nfl_longit$deid)),' individuals.\n',sep=''),text_stats_path,append=T)
-
-nfl_longit_cv_calc = sqldf("
-                           select   deid, avg(csf_nfl) mean_nfl, stdev(csf_nfl) sd_nfl, count(*) n, stdev(csf_nfl)/avg(csf_nfl) cv
-                           from     nfl_longit
-                           group by 1
-                           order by 1
-                           ;")
-nfl_longit_cv = mean(nfl_longit_cv_calc$cv)
-write(paste('Figure 2D results: CSF NfL longitudinal CV: ',percent(nfl_longit_cv, digits=1, format='f'),', N = ',nrow(nfl_longit_cv_calc),' individuals.\n',sep=''),text_stats_path,append=T)
-
-par(mar=c(4,4,3,3))
-xmax = 365*2
-plot(NA, NA, xlim=c(0,xmax), ylim=nfl_short_ylims, xaxs='i', yaxs='i', axes=F, ann=F)
-axis(side=1, at=seq(0, xmax*1.1, 30.44), labels=NA, lwd=1, lwd.ticks=1, tck=-0.025)
-axis(side=1, at=c(0,365/2,365,365*3/2,730), labels=c(0,6,12,18,24), lwd=0, lwd.ticks=1, tck=-0.05)
-axis(side=2, at=nfl_short_yats, labels=nfl_short_ylabs, lwd=1, lwd.ticks=1, las=2)
-mtext(side=2, line=2.5, text='CSF NfL (ng/mL)')
-abline(h=c(nfl_llq,nfl_ulq), lwd=1.5, lty=2, col=limit_col)
-mtext(side=4, at=nfl_llq, line=0.25, las=2, col=limit_col, text='LLQ')
-mtext(side=4, at=nfl_ulq, line=0.25, las=2, col=limit_col, text='ULQ')
-axis(side=4, at=nfl_short_ylims, labels=NA, lwd=1, lwd.ticks=0, las=2)
-mtext(side=1, line=2.5, text='months from first LP')
-
-for (each_indiv in unique(nfl_longit$deid)) {
-  subs = subset(nfl_longit, deid==each_indiv)
-  points(subs$dayno_shift, subs$csf_nfl, type='l', lwd=3, col=subs$color)
-}
-
-mtext('D', side=3, cex=2, adj = -0.1, line = 1.5)
-
-dev.off() ### END FIGURE 2
-
-
-
-
-
-
-
-
-### BEGIN FIGURE 3
-imgsave(paste('figures/figure-3.',imgmode,sep=''),width=6.5*resx,height=3.25*resx,res=resx)
+imgsave(paste('figures/figure-2.',imgmode,sep=''),width=6.5*resx,height=3.25*resx,res=resx)
 
 layout_matrix = matrix(c(1,2),nrow=1,byrow=T)
 layout(layout_matrix)
@@ -560,7 +335,7 @@ plasma_tau_ks_carrier_non     = ks.test(plasma_indiv$tau[plasma_indiv$cat %in% n
 noncarrier_plasmatau_text = meansd(plasma_indiv$tau[plasma_indiv$cat %in% noncarrier_cats])
 carrier_plasmatau_text    = meansd(plasma_indiv$tau[plasma_indiv$cat %in% carrier_cats])
 
-write(paste('Figure 3 results: plasma tau, mutation non-carriers vs. carriers: ',noncarrier_plasmatau_text,' vs. ',carrier_plasmatau_text,' pg/mL, P = ',format_pval(plasma_tau_ks_carrier_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
+write(paste('Figure 2 results: plasma tau, mutation non-carriers vs. carriers: ',noncarrier_plasmatau_text,' vs. ',carrier_plasmatau_text,' pg/mL, P = ',format_pval(plasma_tau_ks_carrier_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
 
 axis(side=1, at=xlims, labels=NA, lwd=1, lwd.ticks=0)
 par(xpd=T)
@@ -578,7 +353,7 @@ mtext(side=2, line=2.5, text='plasma NfL (pg/mL)')
 points(plasma_indiv$xbee, plasma_indiv$nfl, pch=20, cex=.75, col=plasma_indiv$color)
 mtext('A', side=3, cex=2, adj = 0.0, line = 0.5)
 
-write(paste('Figure 3A legend: N= ',sum(!is.na(plasma_indiv$nfl)),' individuals.\n',sep=''),text_stats_path,append=T)
+write(paste('Figure 2A legend: N= ',sum(!is.na(plasma_indiv$nfl)),' individuals.\n',sep=''),text_stats_path,append=T)
 
 # did plasma NfL differ in carriers vs. non-carriers
 plasma_nfl_ks_carrier_non     = ks.test(plasma_indiv$nfl[plasma_indiv$cat %in% noncarrier_cats],  plasma_indiv$nfl[plasma_indiv$cat %in% carrier_cats], alternative='two.sided')
@@ -586,7 +361,7 @@ plasma_nfl_ks_carrier_non     = ks.test(plasma_indiv$nfl[plasma_indiv$cat %in% n
 noncarrier_plasmanfl_text = meansd(plasma_indiv$nfl[plasma_indiv$cat %in% noncarrier_cats])
 carrier_plasmanfl_text    = meansd(plasma_indiv$nfl[plasma_indiv$cat %in% carrier_cats])
 
-write(paste('Figure 3 results: plasma NfL, mutation non-carriers vs. carriers: ',noncarrier_plasmanfl_text,' vs. ',carrier_plasmanfl_text,' pg/mL, P = ',format_pval(plasma_nfl_ks_carrier_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
+write(paste('Figure 2 results: plasma NfL, mutation non-carriers vs. carriers: ',noncarrier_plasmanfl_text,' vs. ',carrier_plasmanfl_text,' pg/mL, P = ',format_pval(plasma_nfl_ks_carrier_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
 
 plasma_longit_3visit = sqldf("select * from plasma where deid in (select deid from plasma where visit = 3);")
 
@@ -610,23 +385,281 @@ for (each_indiv in unique(plasma_longit_3visit$deid)) {
 m = lm(nfl ~ dayno_shift + deid, data=plasma_longit_3visit)
 summary(m)
 plasma_nfl_longit_pval = summary(m)$coefficients['dayno_shift','Pr(>|t|)']
-write(paste('Figure 3 results: plasma NfL 3-visit longitudinal P value: ',format_pval(nfl_longit_pval),', linear regression\n',sep=''),text_stats_path,append=T)
+write(paste('Figure 2 results: plasma NfL 3-visit longitudinal P value: ',format_pval(nfl_longit_pval),', linear regression\n',sep=''),text_stats_path,append=T)
 mtext('B', side=3, cex=2, adj = 0.0, line = 0.5)
 
-write(paste('Figure 3B legend: N= ',length(unique(plasma_longit_3visit$deid)),' individuals.\n',sep=''),text_stats_path,append=T)
+write(paste('Figure 2B legend: N= ',length(unique(plasma_longit_3visit$deid)),' individuals.\n',sep=''),text_stats_path,append=T)
 
-dev.off() ### END FIGURE 3
-
-
+dev.off() ### END FIGURE 2
 
 
 
 
-### BEGIN FIGURE 4
-imgsave(paste('figures/figure-4.',imgmode,sep=''),width=6.5*resx,height=7.5*resx,res=resx)
 
-layout_matrix = matrix(c(1,2,3,4,5,6),nrow=3,byrow=T)
-layout(layout_matrix)
+
+
+
+
+
+
+
+
+
+
+
+### BEGIN FIGURE 3
+imgsave(paste('figures/figure-3.',imgmode,sep=''),width=6.5*resx,height=7*resx,res=resx)
+
+layout_matrix = matrix(c(1,1,1,2,2,2,3,3,3,4,4,4,5,5,6,6,7,7),nrow=3,byrow=T)
+layout(layout_matrix, heights=c(1,1,1))
+
+xlims = expand_range(params$x, by = 0.5)
+tau_ylims = c(0,15000)
+tau_short_ylims = c(0,500)
+tau_yats = (0:3)*5000
+tau_short_yats = (0:6)*100
+tau_ylabs = tau_yats/1000 # convert pg/mL to ng/mL
+tau_short_ylabs = tau_short_yats / 1000
+
+nfl_ylims = c(0,52000)
+nfl_short_ylims = c(0,2000)
+nfl_yats = (0:6)*10000
+nfl_short_yats = (0:4)*500
+nfl_ylabs = nfl_yats / 1000 # convert pg/mL to ng/mL
+nfl_short_ylabs = nfl_short_yats / 1000
+
+par(mar=c(6,4,3,3))
+plot(NA, NA, xlim=xlims, ylim=tau_ylims, ann=FALSE, axes=FALSE, xaxs='i', yaxs='i')
+
+tau_llq = 40.6 #kitinfo3$conc[kitinfo3$cal=='CAL6']
+tau_ulq = 14772.5 #kitinfo7$conc[kitinfo7$cal=='CAL1']*25/4 # poscons run at 1:25 std curve at 1:4
+
+tau = master
+# do l95 and u95 in advance so you don't get weird artifacts
+tau$l95 = pmax(tau$csf_tau - 1.96*tau$csf_tau_se, tau_llq)
+tau$u95 = pmin(tau$csf_tau + 1.96*tau$csf_tau_se, tau_ulq)
+
+# tau at only most recent visit for panel A
+tau_mv = sqldf("
+               select   tau.*
+               from     tau, (select deid, max(visit) maxvisit from tau where csf_tau is not null group by 1 order by 1) taumaxvisit
+               where    tau.deid = taumaxvisit.deid
+               and      tau.visit = taumaxvisit.maxvisit
+               ;")
+
+write(paste('Figure 3A (T-tau) legend: N = ',nrow(tau_mv),' samples: N = ',sum(tau_mv$cat %in% symptomatic_cats),' poscons, N = ',sum(tau_mv$cat %in% participant_cats),' participants\n',sep=''),text_stats_path,append=T)
+
+tau_mv$xbee = 0.0
+
+set.seed(1)
+for (x in unique(tau_mv$x)) {
+  rows = tau_mv$x == x & !is.na(tau_mv$csf_tau)
+  tau_mv$xbee[rows] = tau_mv$x[rows] + beeswarm(csf_tau ~ x, data=tau_mv[rows,], do.plot=F, spacing=0.75, method='hex', corral='random', corralWidth=0.75)$x - 1
+}
+
+# manually fix xbee for high poscon samples for which 95%CIs are large in absolute terms
+to_fix = tau_mv$pgml_av > 1000 & tau_mv$u95 - tau_mv$l95 > 200 & tau_mv$csf_tau < 6000
+set.seed(2)
+tau_mv$xbee[to_fix] = tau_mv$xbee[to_fix] + runif(min=-.33,max=.33,n=sum(to_fix))
+to_fix_more = tau_mv$csf_tau >= 6000
+tau_mv$xbee[to_fix_more] = tau_mv$xbee[to_fix_more] + runif(min=-.33,max=.33,n=sum(to_fix_more))
+
+betweens = params$x - 0.5
+
+limit_col = '#000000'
+control_col = '#404288'
+line_col = '#777777'
+
+axis(side=1, at=xlims, labels=NA, lwd=1, lwd.ticks=0)
+par(xpd=T)
+text(x=params$x, y=rep(0,nrow(params)), srt=45, adj=c(1,1), col=params$color, font=2, labels=params$disp, cex=1.1)
+par(xpd=F)
+abline(v=betweens)
+axis(side=2, at=tau_yats, labels=tau_ylabs, lwd=1, lwd.ticks=1, las=2)
+mtext(side=2, line=2.5, text='CSF T-tau (ng/mL)')
+abline(h=c(tau_llq,tau_ulq), lwd=1.5, lty=2, col=limit_col)
+mtext(side=4, at=tau_llq, line=0.25, las=2, col=limit_col, text='LLQ')
+mtext(side=4, at=tau_ulq, line=0.25, las=2, col=limit_col, text='ULQ')
+axis(side=4, at=tau_ylims, labels=NA, lwd=1, lwd.ticks=0, las=2)
+
+segments(x0=tau_mv$xbee, x1=tau_mv$xbee, y0=tau_mv$l95, y1=tau_mv$u95, lwd=1.5, col=tau_mv$color)
+points(tau_mv$xbee, tau_mv$csf_tau, pch=20, cex=.75, col=tau_mv$color)
+
+mtext('A', side=3, cex=2, adj = 0.0, line = 0.5)
+
+# did CSF T-tau differ in carriers vs. non-carriers, and in participants vs. poscons?
+csf_tau_ks_carrier_non = ks.test(tau_mv$csf_tau[tau_mv$cat %in% noncarrier_cats],  tau_mv$csf_tau[tau_mv$cat %in% carrier_cats], alternative='two.sided')
+csf_tau_ks_symptomatic_non = ks.test(tau_mv$csf_tau[tau_mv$cat %in% participant_cats], tau_mv$csf_tau[tau_mv$cat %in% symptomatic_cats], alternative='two.sided')
+
+participant_csftau_text = meansd(tau_mv$csf_tau[tau_mv$cat %in% participant_cats])
+symptomatic_csftau_text = meansd(tau_mv$csf_tau[tau_mv$cat %in% symptomatic_cats])
+
+write(paste('Figure 3 results: CSF T-tau, symptomatic poscons vs. all study participants: ',symptomatic_csftau_text,' vs. ',participant_csftau_text,' pg/mL, P = ',format_pval(csf_tau_ks_symptomatic_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
+
+noncarrier_csftau_text = meansd(tau_mv$csf_tau[tau_mv$cat %in% noncarrier_cats])
+carrier_csftau_text = meansd(tau_mv$csf_tau[tau_mv$cat %in% carrier_cats])
+
+write(paste('Figure 3 results: CSF T-tau, mutation non-carriers vs. carriers: ',noncarrier_csftau_text,' vs. ',carrier_csftau_text,' pg/mL, P = ',format_pval(csf_tau_ks_carrier_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
+
+# how many study visits had CSF T-tau measured?
+sum(tau_mv$cat %in% participant_cats)
+
+xlims = expand_range(params$x, by=0.5)
+
+par(mar=c(6,4,3,3))
+plot(NA, NA, xlim=xlims, ylim=nfl_ylims, ann=FALSE, axes=FALSE, xaxs='i', yaxs='i')
+
+# nfl at only most recent visit
+nfl_mv = sqldf("
+               select   nfl.*
+               from     master nfl, (select deid, max(visit) maxvisit from master where csf_nfl is not null group by 1 order by 1) nflmaxvisit
+               where    nfl.deid = nflmaxvisit.deid
+               and      nfl.visit = nflmaxvisit.maxvisit
+               ;")
+nfl_mv$l95 = nfl_mv$csf_nfl - 1.96*nfl_mv$csf_nfl_se
+nfl_mv$u95 = nfl_mv$csf_nfl + 1.96*nfl_mv$csf_nfl_se
+
+write(paste('Figure 3B (NfL) legend: N = ',nrow(nfl_mv),' samples: N = ',sum(nfl_mv$cat=='p'),' poscons, N = ',sum(nfl_mv$cat!='p'),' participants\n',sep=''),text_stats_path,append=T)
+
+nfl_mv$xbee = 0.0
+
+set.seed(1)
+for (x in unique(nfl_mv$x)) {
+  rows = nfl_mv$x == x
+  nfl_mv$xbee[rows] = nfl_mv$x[rows] + beeswarm(csf_nfl ~ x, data=nfl_mv[rows,], do.plot=F, spacing=0.75, method='hex', corral='random', corralWidth=0.75)$x - 1
+}
+
+betweens = params$x - 0.5
+
+nfl_llq = 100 * 2
+nfl_ulq = 10000 * 5
+
+axis(side=1, at=xlims, labels=NA, lwd=1, lwd.ticks=0)
+par(xpd=T)
+text(x=params$x, y=rep(0,nrow(params)), srt=45, adj=c(1,1), col=params$color, font=2, labels=params$disp, cex=1.1)
+par(xpd=F)
+
+abline(v=betweens)
+axis(side=2, at=nfl_yats, labels=nfl_ylabs, lwd=1, lwd.ticks=1, las=2)
+mtext(side=2, line=2.5, text='CSF NfL (ng/mL)')
+abline(h=c(nfl_llq,nfl_ulq), lwd=1.5, lty=2, col=limit_col)
+mtext(side=4, at=nfl_llq, line=0.25, las=2, col=limit_col, text='LLQ')
+mtext(side=4, at=nfl_ulq, line=0.25, las=2, col=limit_col, text='ULQ')
+axis(side=4, at=nfl_ylims, labels=NA, lwd=1, lwd.ticks=0, las=2)
+
+segments(x0=nfl_mv$xbee, x1=nfl_mv$xbee, y0=nfl_mv$l95, y1=nfl_mv$u95, lwd=1.5, col=nfl_mv$color)
+points(nfl_mv$xbee, nfl_mv$csf_nfl, pch=20, cex=.75, col=nfl_mv$color)
+
+mtext('B', side=3, cex=2, adj = 0.0, line = 0.5)
+
+# did CSF NfL differ in carriers vs. non-carriers, and in participants vs. poscons?
+csf_nfl_ks_carrier_non = ks.test(nfl_mv$csf_nfl[nfl_mv$cat %in% noncarrier_cats],  nfl_mv$csf_nfl[nfl_mv$cat %in% carrier_cats], alternative='two.sided')
+csf_nfl_ks_symptomatic_non = ks.test(nfl_mv$csf_nfl[nfl_mv$cat %in% participant_cats], nfl_mv$csf_nfl[nfl_mv$cat %in% symptomatic_cats], alternative='two.sided')
+
+participant_csfnfl_text = meansd(nfl_mv$csf_nfl[nfl_mv$cat %in% participant_cats])
+symptomatic_csfnfl_text = meansd(nfl_mv$csf_nfl[nfl_mv$cat %in% symptomatic_cats])
+
+write(paste('Figure 3 results: CSF NfL, symptomatic poscons vs. all study participants: ',symptomatic_csfnfl_text,' vs. ',participant_csfnfl_text,' pg/mL, P = ',format_pval(csf_nfl_ks_symptomatic_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
+
+noncarrier_csfnfl_text = meansd(nfl_mv$csf_nfl[nfl_mv$cat %in% noncarrier_cats])
+carrier_csfnfl_text = meansd(nfl_mv$csf_nfl[nfl_mv$cat %in% carrier_cats])
+
+write(paste('Figure 3 results: CSF NfL, mutation non-carriers vs. carriers: ',noncarrier_csfnfl_text,' vs. ',carrier_csfnfl_text,' pg/mL, P = ',format_pval(csf_nfl_ks_carrier_non$p.value),', two-sided Kolmogorov-Smirnov test\n',sep=''),text_stats_path,append=T)
+
+sum(nfl_mv$cat %in% participant_cats)
+
+### panels C & D - longitudinal tau & NfL where avails
+
+tau_longit = sqldf("
+                   select   *
+                   from     master t
+                   where    t.deid in (select deid from master where visit = 3 and csf_tau is not null)
+                   and      csf_tau is not null
+                   order by deid, visit
+                   ;")
+m = lm(csf_tau ~ deid + dayno_shift, data=tau_longit)
+tau_longit_pval = summary(m)$coefficients['dayno_shift','Pr(>|t|)']
+write(paste('Figure 3C results: CSF T-tau longitudinal P value: ',format_pval(tau_longit_pval),', linear regression, N = ',length(unique(tau_longit$deid)),' individuals\n',sep=''),text_stats_path,append=T)
+
+tau_longit_cv_calc = sqldf("
+                           select   deid, avg(csf_tau) mean_tau, stdev(csf_tau) sd_tau, count(*) n, stdev(csf_tau)/avg(csf_tau) cv_tau
+                           from     tau_longit
+                           group by 1
+                           order by 1
+                           ;")
+tau_longit_cv = mean(tau_longit_cv_calc$cv)
+write(paste('Figure 3C results: CSF T-tau longitudinal CV: ',percent(tau_longit_cv, digits=1, format='f'),', N = ',nrow(tau_longit_cv_calc),' individuals.\n',sep=''),text_stats_path,append=T)
+
+m = lm(csf_tau ~ deid + dayno_shift, data=subset(tau_longit, deid != '17'))
+tau_longit_pval = summary(m)$coefficients['dayno_shift','Pr(>|t|)']
+write(paste('Figure 3C results: CSF T-tau 3-visit longitudinal P value without the one mutation-negative individual who showed a suggestive upward trend: ',format_pval(tau_longit_pval),', linear regression\n',sep=''),text_stats_path,append=T)
+
+par(mar=c(4,4,3,3))
+xmax = 365*2
+plot(NA, NA, xlim=c(0,xmax), ylim=tau_short_ylims, xaxs='i', yaxs='i', axes=F, ann=F)
+axis(side=1, at=seq(0, xmax*1.1, 30.44), labels=NA, lwd=1, lwd.ticks=1, tck=-0.025)
+axis(side=1, at=c(0,365/2,365,365*3/2,730), labels=NA, lwd=0, lwd.ticks=1, tck=-0.05)
+axis(side=1, at=c(0,365/2,365,365*3/2,730), labels=c(0,6,12,18,24), lwd=0, line=-0.5)
+axis(side=2, at=tau_short_yats, labels=tau_short_ylabs, lwd=1, lwd.ticks=1, las=2)
+mtext(side=2, line=2.5, text='CSF T-tau (ng/mL)')
+abline(h=c(tau_llq,tau_ulq), lwd=1.5, lty=2, col=limit_col)
+mtext(side=4, at=tau_llq, line=0.25, las=2, col=limit_col, text='LLQ')
+mtext(side=4, at=tau_ulq, line=0.25, las=2, col=limit_col, text='ULQ')
+axis(side=4, at=tau_short_ylims, labels=NA, lwd=1, lwd.ticks=0, las=2)
+mtext(side=1, line=1.75, text='months from first LP')
+
+for (each_indiv in unique(tau_longit$deid)) {
+  subs = subset(tau_longit, deid==each_indiv)
+  points(subs$dayno_shift, subs$csf_tau, type='l', lwd=3, col=subs$color)
+}
+
+mtext('C', side=3, cex=2, adj = -0.1, line = 1.5)
+
+nfl_longit = sqldf("
+                   select   *
+                   from     master n
+                   where    n.deid in (select deid from master where visit = 3 and csf_nfl is not null)
+                   and      csf_nfl is not null
+                   order by deid, visit
+                   ;")
+
+m = lm(csf_nfl ~ deid + dayno_shift, data=nfl_longit)
+nfl_longit_pval = summary(m)$coefficients['dayno_shift','Pr(>|t|)']
+write(paste('Figure 3D results: CSF NfL longitudinal P value: ',format_pval(nfl_longit_pval),', linear regression, N = ',length(unique(nfl_longit$deid)),' individuals.\n',sep=''),text_stats_path,append=T)
+
+nfl_longit_cv_calc = sqldf("
+                           select   deid, avg(csf_nfl) mean_nfl, stdev(csf_nfl) sd_nfl, count(*) n, stdev(csf_nfl)/avg(csf_nfl) cv
+                           from     nfl_longit
+                           group by 1
+                           order by 1
+                           ;")
+nfl_longit_cv = mean(nfl_longit_cv_calc$cv)
+write(paste('Figure 3D results: CSF NfL longitudinal CV: ',percent(nfl_longit_cv, digits=1, format='f'),', N = ',nrow(nfl_longit_cv_calc),' individuals.\n',sep=''),text_stats_path,append=T)
+
+par(mar=c(4,4,2,3))
+xmax = 365*2
+plot(NA, NA, xlim=c(0,xmax), ylim=nfl_short_ylims, xaxs='i', yaxs='i', axes=F, ann=F)
+axis(side=1, at=seq(0, xmax*1.1, 30.44), labels=NA, lwd=1, lwd.ticks=1, tck=-0.025)
+axis(side=1, at=c(0,365/2,365,365*3/2,730), labels=NA, lwd=0, lwd.ticks=1, tck=-0.05)
+axis(side=1, at=c(0,365/2,365,365*3/2,730), labels=c(0,6,12,18,24), lwd=0, line=-0.5)
+axis(side=2, at=nfl_short_yats, labels=nfl_short_ylabs, lwd=1, lwd.ticks=1, las=2)
+mtext(side=2, line=2.5, text='CSF NfL (ng/mL)')
+abline(h=c(nfl_llq,nfl_ulq), lwd=1.5, lty=2, col=limit_col)
+mtext(side=4, at=nfl_llq, line=0.25, las=2, col=limit_col, text='LLQ')
+mtext(side=4, at=nfl_ulq, line=0.25, las=2, col=limit_col, text='ULQ')
+axis(side=4, at=nfl_short_ylims, labels=NA, lwd=1, lwd.ticks=0, las=2)
+mtext(side=1, line=1.75, text='months from first LP')
+
+for (each_indiv in unique(nfl_longit$deid)) {
+  subs = subset(nfl_longit, deid==each_indiv)
+  points(subs$dayno_shift, subs$csf_nfl, type='l', lwd=3, col=subs$color)
+}
+
+mtext('D', side=3, cex=2, adj = -0.1, line = 0.5)
+
+params$rtqpanel = c(6,7,7,7,7,5) # panels F, GGGG, and E in order
+params$rtqdisp = c('no mutation',rep('mutation carriers',4),'positive controls')
+params$rtqcol = c(params$col[1], rep('#5C5C5C',4),params$col[6])
 
 rtq_xlims = c(0,24)
 rtq_xats = 0:24
@@ -638,33 +671,47 @@ rtq_kinetics = read.table('data/rtq_sha_kinetic.tsv',sep='\t',header=T)
 rtq_kinetics$cat = master$cat[match(rtq_kinetics$deid, master$deid_sample)]
 rtq_kinetics$gt = master$gt[match(rtq_kinetics$deid, master$deid_sample)]
 
-for (panel in 1:6) {
-  i = which(params$panel==panel)
+for (rtqpanel in 5:7) {
+  paramrows = which(params$rtqpanel==rtqpanel)
   
-  par(mar=c(4,5,4,2))
+  par(mar=c(4,4,3,1))
   plot(NA, NA, xlim=rtq_xlims, ylim=rtq_ylims, xaxs='i', yaxs='i', ann=FALSE, axes=FALSE)
   axis(side=1, at=rtq_xats, labels=NA, lwd=1, lwd.ticks=1, tck=-0.025)
   axis(side=1, at=rtq_xbigs, labels=rtq_xbigs, lwd=0, lwd.ticks=1, tck=-0.05)
-  axis(side=2, at=rtq_yats, labels=percent(rtq_yats), las=2)
-  mtext(side=1, line=2.5, text='reaction time (h)')
-  mtext(side=2, line=3, text='normalized fluorescence')
+  axis(side=2, at=rtq_yats, labels=NA, lwd=1)
+  axis(side=2, at=rtq_yats, labels=percent(rtq_yats), las=2, lwd=0, line=-0.5)
   
-  for (each_sample in unique(rtq_kinetics$deid[rtq_kinetics$gt==params$gt[i]])) {
+  mtext(side=1, line=2.5, text='reaction time (h)')
+  mtext(side=2, line=2.5, text='normalized fluorescence')
+  
+  for (each_sample in unique(rtq_kinetics$deid[rtq_kinetics$gt %in% params$gt[paramrows]])) {
     subs = subset(rtq_kinetics, deid == each_sample)
-    points(x=subs$hours, y=subs$fluor, type='l', lwd=3, col=params$color[i])
+    color = params$color[params$gt==rtq_kinetics$gt[rtq_kinetics$deid==each_sample][1]]
+    points(x=subs$hours, y=subs$fluor, type='l', lwd=3, col=color)
   }
   
   # compute summary stats for this category
-  positives = sum(master$gt == params$gt[i] & master$rtq_sha_overall_call == '+' & master$deid_sample %in% rtq_kinetics$deid, na.rm=T)
-  negatives = sum(master$gt == params$gt[i] & master$rtq_sha_overall_call == '-' & master$deid_sample %in% rtq_kinetics$deid, na.rm=T)
+  positives = sum(master$gt %in% params$gt[paramrows] & master$rtq_sha_overall_call == '+' & master$deid_sample %in% rtq_kinetics$deid, na.rm=T)
+  negatives = sum(master$gt %in% params$gt[paramrows] & master$rtq_sha_overall_call == '-' & master$deid_sample %in% rtq_kinetics$deid, na.rm=T)
   positive_rate_message = paste(positives, positives + negatives, sep='/')
   
-  mtext(side=3, line=2, text=params$disp[i], col=params$color[i], font=2)
+  mtext(side=3, line=2, text=params$rtqdisp[paramrows][1], col=params$rtqcol[paramrows][1], font=2)
   mtext(side=3, line=0.5, text=positive_rate_message, col='#000000', font=1)
-  mtext(LETTERS[panel], side=3, cex=2, adj = -0.1, line = 1.5)
+  mtext(LETTERS[rtqpanel], side=3, cex=2, adj = -0.2, line = 0.5)
 }
 
-dev.off() ### END FIGURE 4
+dev.off() ### END FIGURE 3
+
+
+
+
+
+
+
+
+
+
+
 
 # double check numbers
 length(unique(rtq_kinetics$deid))
@@ -975,10 +1022,14 @@ dev.off() ### END FIGURE S3
 
 
 ### BEGIN FIGURE S4
-imgsave(paste('figures/figure-s4.',imgmode,sep=''),width=6.5*resx,height=7.5*resx,res=resx)
+imgsave(paste('figures/figure-s4.',imgmode,sep=''),width=6.5*resx,height=2.5*resx,res=resx)
 
-layout_matrix = matrix(c(1,2,3,4,5,6),nrow=3,byrow=T)
+layout_matrix = matrix(c(1,2,3),nrow=1,byrow=T)
 layout(layout_matrix)
+
+params$rtqpanel = c(2,3,3,3,3,1) # panels F, GGGG, and E in order
+params$rtqdisp = c('no mutation',rep('mutation carriers',4),'positive controls')
+params$rtqcol = c(params$col[1], rep('#5C5C5C',4),params$col[6])
 
 rtq_xlims = c(0,24)
 rtq_xats = 0:24
@@ -990,30 +1041,33 @@ rtq_kinetics = read.table('data/rtq_bv_kinetic.tsv',sep='\t',header=T)
 rtq_kinetics$cat = master$cat[match(rtq_kinetics$deid, master$deid_sample)]
 rtq_kinetics$gt = master$gt[match(rtq_kinetics$deid, master$deid_sample)]
 
-for (panel in 1:6) {
-  i = which(params$panel==panel)
+for (rtqpanel in 1:3) {
+  paramrows = which(params$rtqpanel==rtqpanel)
   
-  par(mar=c(4,5,4,2))
+  par(mar=c(4,4,4,1))
   plot(NA, NA, xlim=rtq_xlims, ylim=rtq_ylims, xaxs='i', yaxs='i', ann=FALSE, axes=FALSE)
   axis(side=1, at=rtq_xats, labels=NA, lwd=1, lwd.ticks=1, tck=-0.025)
   axis(side=1, at=rtq_xbigs, labels=rtq_xbigs, lwd=0, lwd.ticks=1, tck=-0.05)
-  axis(side=2, at=rtq_yats, labels=percent(rtq_yats), las=2)
-  mtext(side=1, line=2.5, text='reaction time (h)')
-  mtext(side=2, line=3, text='normalized fluorescence')
+  axis(side=2, at=rtq_yats, labels=NA, lwd=1)
+  axis(side=2, at=rtq_yats, labels=percent(rtq_yats), las=2, lwd=0, line=-0.5)
   
-  for (each_sample in unique(rtq_kinetics$deid[rtq_kinetics$gt==params$gt[i]])) {
+  mtext(side=1, line=2.5, text='reaction time (h)')
+  mtext(side=2, line=2.5, text='normalized fluorescence')
+  
+  for (each_sample in unique(rtq_kinetics$deid[rtq_kinetics$gt %in% params$gt[paramrows]])) {
     subs = subset(rtq_kinetics, deid == each_sample)
-    points(x=subs$hours, y=subs$fluor, type='l', lwd=3, col=params$color[i])
+    color = params$color[params$gt==rtq_kinetics$gt[rtq_kinetics$deid==each_sample][1]]
+    points(x=subs$hours, y=subs$fluor, type='l', lwd=3, col=color)
   }
   
   # compute summary stats for this category
-  positives = sum(master$gt == params$gt[i] & master$rtq_bv_overall_call == '+' & master$deid_sample %in% rtq_kinetics$deid, na.rm=T)
-  negatives = sum(master$gt == params$gt[i] & master$rtq_bv_overall_call == '-' & master$deid_sample %in% rtq_kinetics$deid, na.rm=T)
+  positives = sum(master$gt %in% params$gt[paramrows] & master$rtq_bv_overall_call == '+' & master$deid_sample %in% rtq_kinetics$deid, na.rm=T)
+  negatives = sum(master$gt %in% params$gt[paramrows] & master$rtq_bv_overall_call == '-' & master$deid_sample %in% rtq_kinetics$deid, na.rm=T)
   positive_rate_message = paste(positives, positives + negatives, sep='/')
   
-  mtext(side=3, line=2, text=params$disp[i], col=params$color[i], font=2)
+  mtext(side=3, line=2, text=params$rtqdisp[paramrows][1], col=params$rtqcol[paramrows][1], font=2)
   mtext(side=3, line=0.5, text=positive_rate_message, col='#000000', font=1)
-  mtext(LETTERS[panel], side=3, cex=2, adj = -0.1, line = 1.5)
+  mtext(LETTERS[rtqpanel], side=3, cex=2, adj = -0.2, line = 0.5)
 }
 
 dev.off() ### END FIGURE S4
